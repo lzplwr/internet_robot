@@ -1,5 +1,4 @@
 # coding:utf-8
-import re
 from flask import Flask
 import requests
 from bs4 import BeautifulSoup
@@ -8,7 +7,6 @@ import json
 from flask import request, session, g, redirect, url_for, abort, \
     render_template, flash, current_app
 import pymysql
-from urllib.request import quote
 
 app = Flask(__name__)
 
@@ -163,7 +161,8 @@ def queryBydemo():
 
 @app.route("/qaByBd/<question>")
 def queryByBD(question):
-    url = "https://wapiknow.baidu.com/index"
+    url = "https://wapiknow.baidu.com" \
+          "/index"
 
     querystring = {"rn": "10", "word": "什么是共保", "lm": "0", "ssid": "0", "from": "0", "bd_page_type": "1",
                    "uid": "B9BFFD2DB0932FDC17AF1039038A5AE7", "pu": "sz@224_240,os@", "init": "middle", "step": "1",
@@ -187,10 +186,8 @@ def queryByBD(question):
     }
 
     base_url = 'https://wapiknow.baidu.com'
-    print(question)
-    print(type(question))
-    querystring['word'] = question.encode('utf-8')
-    response = requests.get(url=url, headers=headers, params=querystring)
+    querystring['word'] = question
+    response = requests.request("GET", url=url, headers=headers, params=querystring)
     html = etree.HTML(response.text.encode('utf-8'))
     detail_urls = html.xpath('//div[@class="slist"]/p/a/@href')[:3]
     titles = html.xpath('//div[@class="slist"]/p/a/text()')[:3]
@@ -205,12 +202,12 @@ def queryByBD(question):
             if kw == '' or len(kw) == 0:
                 kw=question
 
+
             url = "https://wapbaike.baidu.com/item/{0}?tj=fr_ik_search".format(kw)
             # querystring = {"scope": "103", "format": "json", "appid": "379020", "bk_key": kw, "bk_length": "600"}
             response = requests.request("GET", url, headers=headers)
             response.encoding = response.apparent_encoding
 
-            print(response.text)
 
             html = etree.HTML(response.text)
             try:
@@ -223,28 +220,20 @@ def queryByBD(question):
                 if json_data.replace('\n','').strip()  == '':
                     json_data=''.join(html.xpath('//div[@class="summary-content"]/p/text()'))
 
-                print(json_data+'*' * 20)
-                json_data = replace_escape_character(json_data)
-                json_data = remove_needless_sentences(sentnce_segmentation(json_data))
                 answer['data'] = json_data
             except Exception as e:
                 continue
-            print(json.dumps(answer))
             return json.dumps(answer)
         else:
             question = data[0]
             next_url = base_url + data[1]
-            print(next_url)
             baike_response = requests.get(url=next_url, headers=headers)
             baike_response.encoding = 'utf-8'
-            html = bytes(bytearray(baike_response.text, encoding='utf-8'))
-            result = etree.HTML(html)
+            result = etree.HTML(baike_response.text)
             content = result.xpath('//div[@class="full-content"]/text()')
             if len(content) == 0  or ''.join(content).replace('\n','').strip() == '':
                 continue
-            content = replace_escape_character(''.join(content))
-            content = remove_needless_sentences(sentnce_segmentation(content))
-            data_dict[question] = content
+            data_dict[question] = ''.join(content)
             data_list.append(data_dict)
 
     answer['code'] = 200
@@ -382,50 +371,7 @@ def queryBydemo3():
     #db.commit()
     return json.dumps(json.loads(response.text))
 
-def replace_escape_character(string):
-    return string.replace('&quot;','"').replace('&amp;','&').replace('&lt;','<')\
-        .replace('&gt;','>').replace('&nbsp;',' ')
 
-def sentnce_segmentation(text):
-    sentence_delimites = ['?', '!', '。', '？', '！']
-    res = []
-    buf = []
-    counter = 1
-    for ch in text:
-        buf.append(ch)
-        if sentence_delimites.__contains__(ch):
-            res.append(''.join(buf))
-            buf = []
-        if counter == len(text):
-            a = ''.join(buf)
-            if a is not "":
-                res.append(a)
-            buf = []
-        counter += 1
-    return res
-
-def remove_needless_sentences(sentence_list):
-    """
-    过滤不需要的句子
-    :param sentence_list:
-    :return:str:返回文段
-    """
-    remove_feature_words = ["头像", "客服电话", "客户经理", "中国平安平安人寿", "请联系我", "摘自百度百科"]
-    telephone_pattern = re.compile("1[0-9]{10}")
-    output = ""
-    for sentence in sentence_list:
-        if is_has_feature_word(remove_feature_words, sentence):
-            continue
-        if telephone_pattern.search(sentence) is not None:
-            continue
-        output += sentence
-    return output
-
-def is_has_feature_word(remove_feature_words, sentence):
-    for word in remove_feature_words:
-        if word in sentence:
-            return True
-    return False
 
 if __name__ == '__main__':
-    app.run(host='0.0.0.0',debug=True)
+    app.run(host='0.0.0.0',port=9009,debug=False)
